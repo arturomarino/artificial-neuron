@@ -1,31 +1,48 @@
 # Artificial Neuron Simulator
 
-Un simulatore interattivo di neurone artificiale con visualizzazione in tempo reale delle funzioni di attivazione.
+An interactive artificial neuron simulator with real-time activation function visualization.
 
-## Caratteristiche
+## Features
 
-- 🧠 **Gestione Input e Pesi**: Aggiungi, rimuovi e modifica input con i relativi pesi
-- ⚡ **Funzioni di Attivazione**: Scegli tra 6 diverse funzioni di attivazione:
+- 🧠 **Input & Weight Management**: Add, remove, and modify inputs with their corresponding weights
+- ⚡ **Activation Functions**: Choose from 6 different activation functions:
   - Sigmoid
   - Tanh
   - ReLU
   - Leaky ReLU
   - Linear
   - Step
-- 📊 **Grafico in Tempo Reale**: Visualizza il grafico della funzione selezionata con il punto corrente evidenziato
-- 🎯 **Calcoli Trasparenti**: Vedi il calcolo della somma pesata e dell'output in tempo reale
-- 🎨 **Design Moderno**: Interfaccia responsive con supporto per modalità scura
-- 🔧 **Bias Configurabile**: Aggiungi un bias al neurone per maggiore flessibilità
+- 📊 **Real-time Graph**: Visualize the selected function graph with current point highlighted
+- 🎯 **Transparent Calculations**: See weighted sum and output calculations in real-time
+- 🎨 **Modern Design**: Responsive interface with dark mode support
+- 🔧 **Configurable Bias**: Add bias to the neuron for greater flexibility
+- 🔍 **Interactive Visualization**: Zoom (20% to 150%) and pan functionality
+- 📐 **Infinite Coordinate System**: Dynamic grid lines and infinite axes
 
-## Funzionalità Tecniche
+## Technical Features
 
 - 🚀 Server-side rendering
 - ⚡️ Hot Module Replacement (HMR)
 - 📦 Asset bundling and optimization
 - 🔄 Data loading and mutations
 - 🔒 TypeScript by default
-- 🎉 TailwindCSS per lo styling
+- 🎉 TailwindCSS for styling
 - 📖 [React Router docs](https://reactrouter.com/)
+
+## How to Use
+
+### Basic Usage
+1. **Add Inputs**: Use the "+ Add Input" button to add new inputs
+2. **Set Values**: Enter input values and their corresponding weights
+3. **Configure Bias**: Set the bias value for the neuron
+4. **Select Function**: Choose from 6 different activation functions
+5. **View Results**: See real-time calculations and graph visualization
+
+### Interactive Features
+- **Zoom**: Use mouse wheel or +/- buttons to zoom (20% to 150%)
+- **Pan**: Drag the graph to move around the coordinate system
+- **Reset**: Use "Reset View" to return to original position and zoom
+- **Dark Mode**: Automatically adapts to your system theme
 
 ## Getting Started
 
@@ -94,6 +111,21 @@ Make sure to deploy the output of `npm run build`
 ## Styling
 
 This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
+
+## Developer
+
+**Developed by Arturo Marino**
+
+This project demonstrates advanced React concepts including:
+- Interactive data visualization with SVG
+- Real-time mathematical calculations
+- Responsive design with CSS Grid and Flexbox
+- TypeScript for type safety
+- Modern React patterns with hooks
+
+## License
+
+This project is open source and available under the [MIT License](LICENSE).
 
 ---
 
