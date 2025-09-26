@@ -1,17 +1,30 @@
-# Welcome to React Router!
+# Artificial Neuron Simulator
 
-A modern, production-ready template for building full-stack React applications using React Router.
+Un simulatore interattivo di neurone artificiale con visualizzazione in tempo reale delle funzioni di attivazione.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+## Caratteristiche
 
-## Features
+- 🧠 **Gestione Input e Pesi**: Aggiungi, rimuovi e modifica input con i relativi pesi
+- ⚡ **Funzioni di Attivazione**: Scegli tra 6 diverse funzioni di attivazione:
+  - Sigmoid
+  - Tanh
+  - ReLU
+  - Leaky ReLU
+  - Linear
+  - Step
+- 📊 **Grafico in Tempo Reale**: Visualizza il grafico della funzione selezionata con il punto corrente evidenziato
+- 🎯 **Calcoli Trasparenti**: Vedi il calcolo della somma pesata e dell'output in tempo reale
+- 🎨 **Design Moderno**: Interfaccia responsive con supporto per modalità scura
+- 🔧 **Bias Configurabile**: Aggiungi un bias al neurone per maggiore flessibilità
+
+## Funzionalità Tecniche
 
 - 🚀 Server-side rendering
 - ⚡️ Hot Module Replacement (HMR)
 - 📦 Asset bundling and optimization
 - 🔄 Data loading and mutations
 - 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
+- 🎉 TailwindCSS per lo styling
 - 📖 [React Router docs](https://reactrouter.com/)
 
 ## Getting Started

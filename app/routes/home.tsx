@@ -1,13 +1,13 @@
 import type { Route } from "./+types/home";
-import { Welcome } from "../welcome/welcome";
+import { ArtificialNeuron } from "../components/ArtificialNeuron";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "New React Router App" },
-    { name: "description", content: "Welcome to React Router!" },
+    { title: "Artificial Neuron Simulator" },
+    { name: "description", content: "Interactive artificial neuron visualization with activation functions" },
   ];
 }
 
 export default function Home() {
-  return <Welcome />;
+  return <ArtificialNeuron />;
 }
