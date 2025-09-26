@@ -45,6 +45,31 @@ body {
   color: rgba(255, 255, 255, 0.7);
   margin: 0.5rem 0 0 0;
   font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.github-link {
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  transition: color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.github-link:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.github-icon {
+  margin-left: 0.25rem;
+  transition: transform 0.2s ease;
+}
+
+.github-link:hover .github-icon {
+  transform: scale(1.1);
 }
 
 .neuron-content {
@@ -472,6 +497,14 @@ body {
   
   .zoom-level {
     color: #d1d5db;
+  }
+  
+  .github-link {
+    color: rgba(249, 250, 251, 0.7);
+  }
+  
+  .github-link:hover {
+    color: rgba(249, 250, 251, 0.9);
   }
 }
 
