@@ -12,6 +12,47 @@ interface ActivationFunction {
   derivative?: (x: number) => number;
 }
 
+interface AggregationFunction {
+  name: string;
+  fn: (inputs: Input[]) => number;
+  formula: (inputs: Input[], theta: number) => string;
+}
+
+const aggregationFunctions: AggregationFunction[] = [
+  {
+    name: 'Sum',
+    fn: (inputs: Input[]) => inputs.reduce((sum, input) => sum + (input.value * input.weight), 0),
+    formula: (inputs: Input[], theta: number) => {
+      const terms = inputs.map(input => `(${input.value} × ${input.weight})`).join(' + ');
+      return theta !== 0 ? `${terms} + ${theta}` : terms;
+    }
+  },
+  {
+    name: 'Product',
+    fn: (inputs: Input[]) => inputs.reduce((prod, input) => prod * (input.value * input.weight), 1),
+    formula: (inputs: Input[], theta: number) => {
+      const terms = inputs.map(input => `(${input.value} × ${input.weight})`).join(' × ');
+      return theta !== 0 ? `(${terms}) × ${theta}` : terms;
+    }
+  },
+  {
+    name: 'Maximum',
+    fn: (inputs: Input[]) => Math.max(...inputs.map(input => input.value * input.weight)),
+    formula: (inputs: Input[], theta: number) => {
+      const terms = inputs.map(input => `(${input.value} × ${input.weight})`).join(', ');
+      return theta !== 0 ? `max(${terms}) + ${theta}` : `max(${terms})`;
+    }
+  },
+  {
+    name: 'Minimum',
+    fn: (inputs: Input[]) => Math.min(...inputs.map(input => input.value * input.weight)),
+    formula: (inputs: Input[], theta: number) => {
+      const terms = inputs.map(input => `(${input.value} × ${input.weight})`).join(', ');
+      return theta !== 0 ? `min(${terms}) + ${theta}` : `min(${terms})`;
+    }
+  }
+];
+
 const activationFunctions: ActivationFunction[] = [
   {
     name: 'Sigmoid',
@@ -45,6 +86,11 @@ const activationFunctions: ActivationFunction[] = [
     name: 'Step',
     fn: (x: number) => x >= 0 ? 1 : 0,
     derivative: (x: number) => 0
+  },
+  {
+    name: 'Sign',
+    fn: (x: number) => x > 0 ? 1 : -1,
+    derivative: (x: number) => 0
   }
 ];
 
@@ -53,90 +99,163 @@ export function ArtificialNeuron() {
     { id: '1', value: 0, weight: 1 },
     { id: '2', value: 0, weight: 1 }
   ]);
+  const [selectedAggregation, setSelectedAggregation] = useState(aggregationFunctions[0]);
   const [selectedFunction, setSelectedFunction] = useState(activationFunctions[0]);
-  const [bias, setBias] = useState(0);
-  const [biasInput, setBiasInput] = useState('0');
+  const [theta, setTheta] = useState(0);
+  const [thetaInput, setThetaInput] = useState('0');
+  const [linearSlope, setLinearSlope] = useState(1);
+  const [linearSlopeInput, setLinearSlopeInput] = useState('1');
+  const [sigmoidGain, setSigmoidGain] = useState(1);
+  const [sigmoidGainInput, setSigmoidGainInput] = useState('1');
   
-  // Pan and zoom state
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
-  const [zoom, setZoom] = useState(1);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // Calculate weighted sum
-  const weightedSum = useMemo(() => {
-    return inputs.reduce((sum, input) => sum + (input.value * input.weight), 0) + bias;
-  }, [inputs, bias]);
+  // Graph dimensions - fixed professional layout (horizontal rectangle)
+  const width = 1200;
+  const height = 500;
+  const padding = 0; // no padding - full graph area
+  const graphWidth = width - padding * 2;
+  const graphHeight = height - padding * 2;
+
+  // Calculate aggregated value
+  const aggregatedValue = useMemo(() => {
+    const baseValue = selectedAggregation.fn(inputs);
+    // For Product, theta is multiplied; for others, it's added
+    if (selectedAggregation.name === 'Product') {
+      return theta !== 0 ? baseValue * theta : baseValue;
+    }
+    return baseValue + theta;
+  }, [inputs, theta, selectedAggregation]);
 
   // Calculate output using selected activation function
   const output = useMemo(() => {
-    return selectedFunction.fn(weightedSum);
-  }, [selectedFunction, weightedSum]);
+    // For Linear function, apply the slope parameter and clamp between -1 and 1
+    if (selectedFunction.name === 'Linear') {
+      const linearOutput = linearSlope !== 0 ? aggregatedValue / linearSlope : aggregatedValue;
+      return Math.max(-1, Math.min(1, linearOutput));
+    }
+    // For Sigmoid and Tanh, apply the gain parameter
+    if (selectedFunction.name === 'Sigmoid') {
+      return 1 / (1 + Math.exp(-sigmoidGain * aggregatedValue));
+    }
+    if (selectedFunction.name === 'Tanh') {
+      return Math.tanh(sigmoidGain * aggregatedValue);
+    }
+    return selectedFunction.fn(aggregatedValue);
+  }, [selectedFunction, aggregatedValue, linearSlope, sigmoidGain]);
 
-  // Generate data points for the graph
+  // Convert world coordinates to screen coordinates
+  const worldToScreen = useCallback((x: number, y: number) => {
+    // Map x from [-5, 5] to [padding, width - padding]
+    const screenX = padding + ((x + 5) / 10) * graphWidth;
+    // Map y from [-1.5, 1.5] to [height - padding, padding] (inverted for screen coordinates)
+    const screenY = height - padding - ((y + 1.5) / 3) * graphHeight;
+    return { x: screenX, y: screenY };
+  }, [padding, graphWidth, graphHeight, height]);
+
+  // Generate data points for the graph (X: -5 to 5, Y: -1.5 to 1.5)
   const graphData = useMemo(() => {
     const points = [];
-    // Calculate visible range based on pan position
-    const panXRange = Math.abs(panX) / 10; // Convert pan to x range
-    const range = Math.max(30, 30 + panXRange); // Much larger base range
-    const step = 0.05;
+    const numPoints = 1000;
+    const step = 10 / numPoints; // Range of 10 (from -5 to 5) divided by number of points
     
-    // Start from a much larger negative range to ensure continuity
-    const startX = -range - 20;
-    const endX = range + 20;
-    
-    for (let x = startX; x <= endX; x += step) {
-      points.push({
-        x,
-        y: selectedFunction.fn(x)
-      });
+    for (let i = 0; i <= numPoints; i++) {
+      const x = -5 + i * step;
+      let y;
+      
+      if (selectedFunction.name === 'Linear') {
+        const linearY = linearSlope !== 0 ? x / linearSlope : x;
+        y = Math.max(-1.5, Math.min(1.5, linearY));
+      } else if (selectedFunction.name === 'Sigmoid') {
+        y = 1 / (1 + Math.exp(-sigmoidGain * x));
+      } else if (selectedFunction.name === 'Tanh') {
+        y = Math.tanh(sigmoidGain * x);
+      } else {
+        y = selectedFunction.fn(x);
+      }
+      
+      // Clamp y to the visible range
+      y = Math.max(-1.5, Math.min(1.5, y));
+      
+      const screen = worldToScreen(x, y);
+      points.push({ x: screen.x, y: screen.y });
     }
     return points;
-  }, [selectedFunction, panX]);
+  }, [selectedFunction, linearSlope, sigmoidGain, worldToScreen]);
 
-  // Pan and zoom handlers
-  const handleZoomIn = useCallback(() => {
-    setZoom(prev => Math.min(prev * 1.2, 1.5));
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    setZoom(prev => Math.max(prev / 1.2, 0.2));
-  }, []);
-
-  const handleResetView = useCallback(() => {
-    setPanX(0);
-    setPanY(0);
-    setZoom(1);
-  }, []);
-
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom(prev => Math.max(0.2, Math.min(1.5, prev * delta)));
-  }, []);
-
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - panX, y: e.clientY - panY });
-  }, [panX, panY]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isDragging) {
-      setPanX(e.clientX - dragStart.x);
-      setPanY(e.clientY - dragStart.y);
+  // Generate professional grid lines (GeoGebra style)
+  const gridLines = useMemo(() => {
+    const lines: { x1: number; y1: number; x2: number; y2: number; type: 'minor' | 'major' }[] = [];
+    
+    // Minor grid spacing: 0.1 units
+    // Major grid spacing: 0.5 units (every 5 minor lines)
+    const minorSpacing = 0.1;
+    const majorInterval = 5; // Every 5 minor lines (0.5 units)
+    
+    // Vertical lines (X axis: from -5 to 5)
+    for (let i = -50; i <= 50; i++) {
+      const x = i * minorSpacing;
+      const screen = worldToScreen(x, 0);
+      const isMajor = i % majorInterval === 0;
+      
+      lines.push({
+        x1: screen.x,
+        y1: padding,
+        x2: screen.x,
+        y2: height - padding,
+        type: isMajor ? 'major' : 'minor'
+      });
     }
-  }, [isDragging, dragStart]);
+    
+    // Horizontal lines (Y axis: from -1.5 to 1.5)
+    for (let i = -15; i <= 15; i++) {
+      const y = i * minorSpacing;
+      const screen = worldToScreen(0, y);
+      const isMajor = i % majorInterval === 0;
+      
+      lines.push({
+        x1: padding,
+        y1: screen.y,
+        x2: width - padding,
+        y2: screen.y,
+        type: isMajor ? 'major' : 'minor'
+      });
+    }
+    
+    return lines;
+  }, [worldToScreen, padding, width, height]);
 
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
+  // Generate tick marks and labels (decimals visible)
+  const tickMarks = useMemo(() => {
+    const ticks: { x: number; y: number; label: string; axis: 'x' | 'y' }[] = [];
+    
+    // X-axis ticks - every 1 unit
+    const xValues = [-5, -4, -3, -2, -1, 1, 2, 3, 4, 5];
+    for (const x of xValues) {
+      const screen = worldToScreen(x, 0);
+      ticks.push({
+        x: screen.x,
+        y: screen.y,
+        label: x.toString(),
+        axis: 'x'
+      });
+    }
+    
+    // Y-axis ticks - every 0.3 units with decimal labels
+    const yValues = [-1.5, -1.2, -0.9, -0.6, -0.3, 0.3, 0.6, 0.9, 1.2, 1.5];
+    for (const y of yValues) {
+      const screen = worldToScreen(0, y);
+      ticks.push({
+        x: screen.x,
+        y: screen.y,
+        label: y.toFixed(1),
+        axis: 'y'
+      });
+    }
+    
+    return ticks;
+  }, [worldToScreen]);
 
-  const handleMouseLeave = useCallback(() => {
-    setIsDragging(false);
-  }, []);
 
   const addInput = () => {
     const newId = (inputs.length + 1).toString();
@@ -155,9 +274,27 @@ export function ArtificialNeuron() {
     ));
   };
 
-  const handleBiasChange = (value: string) => {
-    setBiasInput(value);
-    setBias(value === '' ? 0 : parseFloat(value) || 0);
+  const handleThetaChange = (value: string) => {
+    setThetaInput(value);
+    setTheta(value === '' ? 0 : parseFloat(value) || 0);
+  };
+
+  const handleLinearSlopeChange = (value: string) => {
+    setLinearSlopeInput(value);
+    setLinearSlope(value === '' ? 1 : parseFloat(value) || 1);
+  };
+
+  const handleSigmoidGainChange = (value: string) => {
+    setSigmoidGainInput(value);
+    const numValue = parseFloat(value);
+    // Ensure g is always greater than 1
+    if (value === '') {
+      setSigmoidGain(1);
+    } else if (!isNaN(numValue) && numValue > 1) {
+      setSigmoidGain(numValue);
+    } else {
+      setSigmoidGain(1.1); // Minimum value slightly greater than 1
+    }
   };
 
   return (
@@ -241,16 +378,31 @@ export function ArtificialNeuron() {
               ))}
             </div>
 
-            <div className="bias-control">
-              <label>Bias:</label>
+            <div className="theta-control">
+              <label>θ (Theta):</label>
               <input
                 type="number"
-                value={biasInput}
-                onChange={(e) => handleBiasChange(e.target.value)}
+                value={thetaInput}
+                onChange={(e) => handleThetaChange(e.target.value)}
                 step="0.1"
                 className="input-field"
                 placeholder="0"
               />
+            </div>
+          </div>
+
+          <div className="aggregation-section">
+            <h2>Aggregation Function</h2>
+            <div className="function-selector">
+              {aggregationFunctions.map((func) => (
+                <button
+                  key={func.name}
+                  className={`function-btn ${selectedAggregation.name === func.name ? 'active' : ''}`}
+                  onClick={() => setSelectedAggregation(func)}
+                >
+                  {func.name}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -267,6 +419,35 @@ export function ArtificialNeuron() {
                 </button>
               ))}
             </div>
+            
+            {selectedFunction.name === 'Linear' && (
+              <div className="linear-slope-control">
+                <label>a (Slope):</label>
+                <input
+                  type="number"
+                  value={linearSlopeInput}
+                  onChange={(e) => handleLinearSlopeChange(e.target.value)}
+                  step="0.1"
+                  className="input-field"
+                  placeholder="1"
+                />
+              </div>
+            )}
+            
+            {(selectedFunction.name === 'Sigmoid' || selectedFunction.name === 'Tanh') && (
+              <div className="sigmoid-gain-control">
+                <label>g (Gain):</label>
+                <input
+                  type="number"
+                  value={sigmoidGainInput}
+                  onChange={(e) => handleSigmoidGainChange(e.target.value)}
+                  step="0.1"
+                  min="1.01"
+                  className="input-field"
+                  placeholder="1"
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -275,21 +456,20 @@ export function ArtificialNeuron() {
             <h3>Calculation</h3>
             <div className="calculation-steps">
               <div className="step">
-                <span className="step-label">Weighted Sum:</span>
+                <span className="step-label">Aggregated Value:</span>
                 <span className="step-value">
-                  {inputs.map((input, index) => (
-                    <span key={input.id}>
-                      {index > 0 && ' + '}
-                      ({input.value} × {input.weight})
-                    </span>
-                  ))}
-                  {bias !== 0 && ` + ${bias}`} = {weightedSum.toFixed(3)}
+                  {selectedAggregation.formula(inputs, theta)} = {aggregatedValue.toFixed(3)}
                 </span>
               </div>
               <div className="step">
                 <span className="step-label">Output:</span>
                 <span className="step-value">
-                  {selectedFunction.name}({weightedSum.toFixed(3)}) = {output.toFixed(3)}
+                  {selectedFunction.name === 'Linear' 
+                    ? `clamp(${aggregatedValue.toFixed(3)} / ${linearSlope}, -1, 1) = ${output.toFixed(3)}`
+                    : (selectedFunction.name === 'Sigmoid' || selectedFunction.name === 'Tanh')
+                    ? `${selectedFunction.name}(${sigmoidGain} × ${aggregatedValue.toFixed(3)}) = ${output.toFixed(3)}`
+                    : `${selectedFunction.name}(${aggregatedValue.toFixed(3)}) = ${output.toFixed(3)}`
+                  }
                 </span>
               </div>
             </div>
@@ -298,133 +478,250 @@ export function ArtificialNeuron() {
           <div className="graph-container">
             <div className="graph-header">
               <h3>Activation Function Graph</h3>
-              <div className="graph-controls">
-                <div className="zoom-controls">
-                  <button 
-                    className="zoom-btn"
-                    onClick={handleZoomOut}
-                    disabled={zoom <= 0.2}
-                    title="Zoom Out"
-                  >
-                    −
-                  </button>
-                  <span className="zoom-level">{(zoom * 100).toFixed(0)}%</span>
-                  <button 
-                    className="zoom-btn"
-                    onClick={handleZoomIn}
-                    disabled={zoom >= 1.5}
-                    title="Zoom In"
-                  >
-                    +
-                  </button>
-                </div>
-                <button 
-                  className="reset-view-btn"
-                  onClick={handleResetView}
-                  title="Reset View"
-                >
-                  Reset View
-                </button>
-              </div>
             </div>
             <div className="graph-wrapper">
-              <div className="graph-instructions">
-                <p>🖱️ Drag to pan • Scroll to zoom</p>
-              </div>
               <svg 
                 ref={svgRef}
                 className="activation-graph" 
-                viewBox="0 0 400 300"
-                onWheel={handleWheel}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseLeave}
-                style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+                viewBox={`0 0 ${width} ${height}`}
               >
-                <defs>
-                  <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e5e7eb" strokeWidth="0.5"/>
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#grid)" />
+                {/* Background */}
+                <rect x="0" y="0" width={width} height={height} fill="#ffffff" />
                 
-                {/* Transform group for pan and zoom */}
-                <g transform={`translate(${panX}, ${panY}) scale(${zoom})`}>
-                  {/* Infinite Axes - Extended beyond viewport */}
-                  <line x1="200" y1="-1000" x2="200" y2="1000" stroke="#374151" strokeWidth="2"/>
-                  <line x1="-1000" y1="150" x2="1000" y2="150" stroke="#374151" strokeWidth="2"/>
-                  
-                  {/* Axis labels */}
-                  <text x="200" y="20" textAnchor="middle" className="axis-label">y</text>
-                  <text x="390" y="155" textAnchor="middle" className="axis-label">x</text>
-                  
-                  {/* Dynamic grid lines based on pan position */}
-                  {Array.from({ length: 41 }, (_, i) => {
-                    const gridSpacing = 20;
-                    const centerX = 200;
-                    const centerY = 150;
-                    const offset = (i - 20) * gridSpacing;
-                    const isMainGrid = offset % (gridSpacing * 5) === 0; // Every 5th line is main grid
-                    
-                    return (
-                      <g key={`grid-${i}`}>
-                        {/* Vertical grid lines */}
-                        <line 
-                          x1={centerX + offset} 
-                          y1="-1000" 
-                          x2={centerX + offset} 
-                          y2="1000" 
-                          stroke={isMainGrid ? "#9ca3af" : "#d1d5db"} 
-                          strokeWidth={isMainGrid ? "0.8" : "0.5"}
-                          opacity={isMainGrid ? "0.5" : "0.3"}
-                        />
-                        {/* Horizontal grid lines */}
-                        <line 
-                          x1="-1000" 
-                          y1={centerY + offset} 
-                          x2="1000" 
-                          y2={centerY + offset} 
-                          stroke={isMainGrid ? "#9ca3af" : "#d1d5db"} 
-                          strokeWidth={isMainGrid ? "0.8" : "0.5"}
-                          opacity={isMainGrid ? "0.5" : "0.3"}
-                        />
-                      </g>
-                    );
+                {/* Graph area background */}
+                <rect 
+                  x={padding} 
+                  y={padding} 
+                  width={graphWidth} 
+                  height={graphHeight} 
+                  fill="#fafafa" 
+                  stroke="#e0e0e0"
+                  strokeWidth="1"
+                />
+                
+                {/* Grid lines */}
+                <g>
+                  {gridLines.map((line, i) => (
+                    <line
+                      key={`grid-${i}`}
+                      x1={line.x1}
+                      y1={line.y1}
+                      x2={line.x2}
+                      y2={line.y2}
+                      stroke={line.type === 'major' ? '#cccccc' : '#e8e8e8'}
+                      strokeWidth={line.type === 'major' ? 1.2 : 0.6}
+                    />
+                  ))}
+                </g>
+                
+                {/* Axes */}
+                {(() => {
+                  const origin = worldToScreen(0, 0);
+                  return (
+                    <g>
+                      {/* X-axis */}
+                      <line
+                        x1={padding}
+                        y1={origin.y}
+                        x2={width - padding}
+                        y2={origin.y}
+                        stroke="#333333"
+                        strokeWidth={2}
+                      />
+                      {/* Y-axis */}
+                      <line
+                        x1={origin.x}
+                        y1={padding}
+                        x2={origin.x}
+                        y2={height - padding}
+                        stroke="#333333"
+                        strokeWidth={2}
+                      />
+                      
+                      {/* Axis arrows */}
+                      <polygon
+                        points={`${width - padding + 6},${origin.y - 5} ${width - padding + 6},${origin.y + 5} ${width - padding + 12},${origin.y}`}
+                        fill="#333333"
+                      />
+                      <polygon
+                        points={`${origin.x - 5},${padding - 6} ${origin.x + 5},${padding - 6} ${origin.x},${padding - 12}`}
+                        fill="#333333"
+                      />
+                      
+                      {/* Axis labels */}
+                      <text
+                        x={width - padding + 20}
+                        y={origin.y - 10}
+                        className="axis-label"
+                        fill="#333333"
+                        fontSize="16"
+                        fontWeight="600"
+                        fontStyle="italic"
+                      >
+                        x
+                      </text>
+                      <text
+                        x={origin.x + 15}
+                        y={padding - 15}
+                        className="axis-label"
+                        fill="#333333"
+                        fontSize="16"
+                        fontWeight="600"
+                        fontStyle="italic"
+                      >
+                        y
+                      </text>
+                      
+                      {/* Origin label */}
+                      <text
+                        x={origin.x - 18}
+                        y={origin.y + 18}
+                        className="origin-label"
+                        fill="#666666"
+                        fontSize="13"
+                        fontWeight="500"
+                      >
+                        0
+                      </text>
+                    </g>
+                  );
+                })()}
+                
+                {/* Tick marks and labels */}
+                <g>
+                  {tickMarks.map((tick, i) => {
+                    if (tick.axis === 'x') {
+                      return (
+                        <g key={`tick-${i}`}>
+                          <line
+                            x1={tick.x}
+                            y1={tick.y - 6}
+                            x2={tick.x}
+                            y2={tick.y + 6}
+                            stroke="#333333"
+                            strokeWidth={1.5}
+                          />
+                          <text
+                            x={tick.x}
+                            y={tick.y + 22}
+                            textAnchor="middle"
+                            fill="#555555"
+                            fontSize="12"
+                            fontWeight="500"
+                            fontFamily="Arial, sans-serif"
+                          >
+                            {tick.label}
+                          </text>
+                        </g>
+                      );
+                    } else {
+                      return (
+                        <g key={`tick-${i}`}>
+                          <line
+                            x1={tick.x - 6}
+                            y1={tick.y}
+                            x2={tick.x + 6}
+                            y2={tick.y}
+                            stroke="#333333"
+                            strokeWidth={1.5}
+                          />
+                          <text
+                            x={tick.x - 12}
+                            y={tick.y + 5}
+                            textAnchor="end"
+                            fill="#555555"
+                            fontSize="12"
+                            fontWeight="500"
+                            fontFamily="Arial, sans-serif"
+                          >
+                            {tick.label}
+                          </text>
+                        </g>
+                      );
+                    }
                   })}
-                  
-                  {/* Function curve */}
-                  <path
-                    d={graphData.map((point, index) => {
-                      const x = 200 + (point.x * 10); // Adjusted scale for larger range
-                      const y = 150 - (point.y * 10); // Adjusted scale for larger range
-                      return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-                    }).join(' ')}
-                    fill="none"
-                    stroke="#3b82f6"
-                    strokeWidth="3"
-                    vectorEffect="non-scaling-stroke"
-                  />
+                </g>
+                
+                {/* Clip path for function curve */}
+                <defs>
+                  <clipPath id="graphClip">
+                    <rect x={padding} y={padding} width={graphWidth} height={graphHeight} />
+                  </clipPath>
+                </defs>
+                
+                {/* Function curve */}
+                <g clipPath="url(#graphClip)">
+                  {graphData.length > 0 && (
+                    <path
+                      d={graphData.map((point, index) => 
+                        `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
+                      ).join(' ')}
+                      fill="none"
+                      stroke="#1976d2"
+                      strokeWidth={3}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                  )}
                   
                   {/* Current point */}
-                  <circle
-                    cx={200 + (weightedSum * 10)}
-                    cy={150 - (output * 10)}
-                    r="6"
-                    fill="#ef4444"
-                    stroke="#ffffff"
-                    strokeWidth="2"
-                  />
-                  
-                  {/* Current point label */}
-                  <text
-                    x={200 + (weightedSum * 10)}
-                    y={150 - (output * 10) - 15}
-                    textAnchor="middle"
-                    className="point-label"
-                  >
-                    ({weightedSum.toFixed(1)}, {output.toFixed(1)})
-                  </text>
+                  {(() => {
+                    const point = worldToScreen(aggregatedValue, output);
+                    // Only show if in graph bounds
+                    if (point.x < padding || point.x > width - padding || 
+                        point.y < padding || point.y > height - padding) {
+                      return null;
+                    }
+                    return (
+                      <>
+                        {/* Point indicator lines */}
+                        <line
+                          x1={point.x}
+                          y1={worldToScreen(0, 0).y}
+                          x2={point.x}
+                          y2={point.y}
+                          stroke="#d32f2f"
+                          strokeWidth={1.5}
+                          strokeDasharray="4,4"
+                          opacity={0.6}
+                        />
+                        <line
+                          x1={worldToScreen(0, 0).x}
+                          y1={point.y}
+                          x2={point.x}
+                          y2={point.y}
+                          stroke="#d32f2f"
+                          strokeWidth={1.5}
+                          strokeDasharray="4,4"
+                          opacity={0.6}
+                        />
+                        
+                        {/* Point */}
+                        <circle
+                          cx={point.x}
+                          cy={point.y}
+                          r="6"
+                          fill="#d32f2f"
+                          stroke="#ffffff"
+                          strokeWidth="2.5"
+                        />
+                        
+                        {/* Point label */}
+                        <text
+                          x={point.x}
+                          y={point.y - 18}
+                          textAnchor="middle"
+                          className="point-label"
+                          fill="#d32f2f"
+                          fontSize="13"
+                          fontWeight="700"
+                          fontFamily="Arial, sans-serif"
+                        >
+                          ({aggregatedValue.toFixed(2)}, {output.toFixed(2)})
+                        </text>
+                      </>
+                    );
+                  })()}
                 </g>
               </svg>
             </div>
