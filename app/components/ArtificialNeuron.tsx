@@ -24,7 +24,7 @@ const aggregationFunctions: AggregationFunction[] = [
     fn: (inputs: Input[]) => inputs.reduce((sum, input) => sum + (input.value * input.weight), 0),
     formula: (inputs: Input[], theta: number) => {
       const terms = inputs.map(input => `(${input.value} × ${input.weight})`).join(' + ');
-      return theta !== 0 ? `${terms} + ${theta}` : terms;
+      return theta !== 0 ? `${terms} - ${theta}` : terms;
     }
   },
   {
@@ -32,7 +32,7 @@ const aggregationFunctions: AggregationFunction[] = [
     fn: (inputs: Input[]) => inputs.reduce((prod, input) => prod * (input.value * input.weight), 1),
     formula: (inputs: Input[], theta: number) => {
       const terms = inputs.map(input => `(${input.value} × ${input.weight})`).join(' × ');
-      return theta !== 0 ? `(${terms}) + ${theta}` : terms;
+      return theta !== 0 ? `(${terms}) - ${theta}` : terms;
     }
   },
   {
@@ -40,7 +40,7 @@ const aggregationFunctions: AggregationFunction[] = [
     fn: (inputs: Input[]) => Math.max(...inputs.map(input => input.value * input.weight)),
     formula: (inputs: Input[], theta: number) => {
       const terms = inputs.map(input => `(${input.value} × ${input.weight})`).join(', ');
-      return theta !== 0 ? `max(${terms}) + ${theta}` : `max(${terms})`;
+      return theta !== 0 ? `max(${terms}) - ${theta}` : `max(${terms})`;
     }
   },
   {
@@ -48,7 +48,7 @@ const aggregationFunctions: AggregationFunction[] = [
     fn: (inputs: Input[]) => Math.min(...inputs.map(input => input.value * input.weight)),
     formula: (inputs: Input[], theta: number) => {
       const terms = inputs.map(input => `(${input.value} × ${input.weight})`).join(', ');
-      return theta !== 0 ? `min(${terms}) + ${theta}` : `min(${terms})`;
+      return theta !== 0 ? `min(${terms}) - ${theta}` : `min(${terms})`;
     }
   }
 ];
@@ -107,12 +107,16 @@ export function ArtificialNeuron() {
   const graphWidth = width - padding * 2;
   const graphHeight = height - padding * 2;
 
-  // Calculate aggregated value
+  // Calculate input function (before bias subtraction)
+  const inputFunction = useMemo(() => {
+    return selectedAggregation.fn(inputs);
+  }, [inputs, selectedAggregation]);
+
+  // Calculate aggregated value (after bias subtraction)
   const aggregatedValue = useMemo(() => {
-    const baseValue = selectedAggregation.fn(inputs);
-    // Theta is always added (summed) for all aggregation functions
-    return baseValue + theta;
-  }, [inputs, theta, selectedAggregation]);
+    // Theta is always subtracted for all aggregation functions
+    return inputFunction - theta;
+  }, [inputFunction, theta]);
 
   // Calculate output using selected activation function
   const output = useMemo(() => {
@@ -380,7 +384,7 @@ export function ArtificialNeuron() {
                 type="number"
                 value={thetaInput}
                 onChange={(e) => handleThetaChange(e.target.value)}
-                step="0.1"
+                step="0.01"
                 className="input-field"
                 placeholder="0"
               />
@@ -453,9 +457,15 @@ export function ArtificialNeuron() {
             <h3>Calculation</h3>
             <div className="calculation-steps">
               <div className="step">
+                <span className="step-label">Input Function Value:</span>
+                <span className="step-value">
+                  {selectedAggregation.formula(inputs, 0)} = {inputFunction.toFixed(3)}
+                </span>
+              </div>
+              <div className="step">
                 <span className="step-label">Aggregated Value:</span>
                 <span className="step-value">
-                  {selectedAggregation.formula(inputs, theta)} = {aggregatedValue.toFixed(3)}
+                  {inputFunction.toFixed(3)} - {theta} = {aggregatedValue.toFixed(3)}
                 </span>
               </div>
               <div className="step">
