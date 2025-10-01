@@ -32,7 +32,7 @@ const aggregationFunctions: AggregationFunction[] = [
     fn: (inputs: Input[]) => inputs.reduce((prod, input) => prod * (input.value * input.weight), 1),
     formula: (inputs: Input[], theta: number) => {
       const terms = inputs.map(input => `(${input.value} × ${input.weight})`).join(' × ');
-      return theta !== 0 ? `(${terms}) × ${theta}` : terms;
+      return theta !== 0 ? `(${terms}) + ${theta}` : terms;
     }
   },
   {
@@ -66,16 +66,6 @@ const activationFunctions: ActivationFunction[] = [
     name: 'Tanh',
     fn: (x: number) => Math.tanh(x),
     derivative: (x: number) => 1 - Math.tanh(x) ** 2
-  },
-  {
-    name: 'ReLU',
-    fn: (x: number) => Math.max(0, x),
-    derivative: (x: number) => x > 0 ? 1 : 0
-  },
-  {
-    name: 'Leaky ReLU',
-    fn: (x: number) => x > 0 ? x : 0.01 * x,
-    derivative: (x: number) => x > 0 ? 1 : 0.01
   },
   {
     name: 'Linear',
@@ -120,10 +110,7 @@ export function ArtificialNeuron() {
   // Calculate aggregated value
   const aggregatedValue = useMemo(() => {
     const baseValue = selectedAggregation.fn(inputs);
-    // For Product, theta is multiplied; for others, it's added
-    if (selectedAggregation.name === 'Product') {
-      return theta !== 0 ? baseValue * theta : baseValue;
-    }
+    // Theta is always added (summed) for all aggregation functions
     return baseValue + theta;
   }, [inputs, theta, selectedAggregation]);
 
@@ -165,7 +152,8 @@ export function ArtificialNeuron() {
       
       if (selectedFunction.name === 'Linear') {
         const linearY = linearSlope !== 0 ? x / linearSlope : x;
-        y = Math.max(-1.5, Math.min(1.5, linearY));
+        // Linear function must stay between -1 and 1
+        y = Math.max(-1, Math.min(1, linearY));
       } else if (selectedFunction.name === 'Sigmoid') {
         y = 1 / (1 + Math.exp(-sigmoidGain * x));
       } else if (selectedFunction.name === 'Tanh') {
@@ -241,14 +229,14 @@ export function ArtificialNeuron() {
       });
     }
     
-    // Y-axis ticks - every 0.3 units with decimal labels
-    const yValues = [-1.5, -1.2, -0.9, -0.6, -0.3, 0.3, 0.6, 0.9, 1.2, 1.5];
+    // Y-axis ticks - every 0.25 units
+    const yValues = [-1.5, -1.25, -1, -0.75, -0.5, -0.25, 0.25, 0.5, 0.75, 1, 1.25, 1.5];
     for (const y of yValues) {
       const screen = worldToScreen(0, y);
       ticks.push({
         x: screen.x,
         y: screen.y,
-        label: y.toFixed(1),
+        label: y % 1 === 0 ? y.toString() : y.toFixed(2),
         axis: 'y'
       });
     }
@@ -281,7 +269,15 @@ export function ArtificialNeuron() {
 
   const handleLinearSlopeChange = (value: string) => {
     setLinearSlopeInput(value);
-    setLinearSlope(value === '' ? 1 : parseFloat(value) || 1);
+    const numValue = parseFloat(value);
+    // Ensure a is always 1 or greater
+    if (value === '') {
+      setLinearSlope(1);
+    } else if (!isNaN(numValue) && numValue >= 1) {
+      setLinearSlope(numValue);
+    } else {
+      setLinearSlope(1); // Minimum value is 1
+    }
   };
 
   const handleSigmoidGainChange = (value: string) => {
@@ -428,6 +424,7 @@ export function ArtificialNeuron() {
                   value={linearSlopeInput}
                   onChange={(e) => handleLinearSlopeChange(e.target.value)}
                   step="0.1"
+                  min="1"
                   className="input-field"
                   placeholder="1"
                 />
