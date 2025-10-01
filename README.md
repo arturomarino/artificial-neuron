@@ -13,10 +13,7 @@ An interactive artificial neuron simulator with real-time activation function vi
   - Sign
 - 📊 **Real-time Graph**: Visualize the selected function graph with current point highlighted
 - 🎯 **Transparent Calculations**: See weighted sum and output calculations in real-time
-- 🎨 **Modern Design**: Responsive interface with dark mode support
 - 🔧 **Configurable Bias**: Add bias to the neuron for greater flexibility
-- 🔍 **Interactive Visualization**: Zoom (20% to 150%) and pan functionality
-- 📐 **Infinite Coordinate System**: Dynamic grid lines and infinite axes
 
 ## How to Use
 
