@@ -81,7 +81,13 @@ const activationFunctions: ActivationFunction[] = [
     name: 'Sign',
     fn: (x: number) => x > 0 ? 1 : -1,
     derivative: (x: number) => 0
+  },
+  {
+    name:"Custom",
+    fn: (x:number) => (x*x)+x-1,
+    derivative: (x:number) => (2*x)+1
   }
+
 ];
 
 export function ArtificialNeuron() {
@@ -132,6 +138,9 @@ export function ArtificialNeuron() {
     if (selectedFunction.name === 'Tanh') {
       return Math.tanh(sigmoidGain * aggregatedValue);
     }
+    if( (selectedFunction.name === "Custom")){
+      return (aggregatedValue*aggregatedValue)+aggregatedValue-1;
+    }
     return selectedFunction.fn(aggregatedValue);
   }, [selectedFunction, aggregatedValue, linearSlope, sigmoidGain]);
 
@@ -162,6 +171,8 @@ export function ArtificialNeuron() {
         y = 1 / (1 + Math.exp(-sigmoidGain * x));
       } else if (selectedFunction.name === 'Tanh') {
         y = Math.tanh(sigmoidGain * x);
+      } else if (selectedFunction.name === 'Custom') {
+        y = (x*x) +x-1;
       } else {
         y = selectedFunction.fn(x);
       }
